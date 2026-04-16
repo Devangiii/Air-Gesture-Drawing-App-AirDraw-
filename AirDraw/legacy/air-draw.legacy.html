@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AirDraw — Draw with Your Hand</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --accent: #7c3aed;
+    --accent2: #06b6d4;
+    --accent3: #f59e0b;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --danger: #ef4444;
+    --success: #10b981;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* Ambient background */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -30%;
+    left: -20%;
+    width: 60%;
+    height: 70%;
+    background: radial-gradient(ellipse, rgba(124,58,237,0.12) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -20%;
+    right: -10%;
+    width: 50%;
+    height: 60%;
+    background: radial-gradient(ellipse, rgba(6,182,212,0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.8);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    font-size: 1.3rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .logo span {
+    font-family: 'Space Mono', monospace;
+    font-weight: 400;
+    font-size: 0.75rem;
+    -webkit-text-fill-color: var(--text-dim);
+    letter-spacing: 0.08em;
+    margin-left: 8px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    transition: all 0.3s;
+  }
+
+  .status-pill .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: all 0.3s;
+  }
+
+  .status-pill.active .dot { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .status-pill.active { color: var(--success); border-color: rgba(16,185,129,0.3); }
+  .status-pill.detecting .dot { background: var(--accent3); box-shadow: 0 0 8px var(--accent3); animation: pulse 1s infinite; }
+  .status-pill.detecting { color: var(--accent3); border-color: rgba(245,158,11,0.3); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  main {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 80px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0 10px;
+  }
+
+  .sidebar-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .divider {
+    width: 40px;
+    height: 1px;
+    background: var(--border);
+    margin: 8px auto;
+  }
+
+  /* Color swatches */
+  .color-swatch {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .color-swatch:hover { transform: scale(1.1); }
+  .color-swatch.active {
+    border-color: white;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.3), 0 4px 12px rgba(0,0,0,0.4);
+    transform: scale(1.1);
+  }
+
+  /* Tool buttons */
+  .tool-btn {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 1.1rem;
+    position: relative;
+  }
+
+  .tool-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); border-color: rgba(255,255,255,0.15); }
+  .tool-btn.active { background: rgba(124,58,237,0.2); color: var(--accent); border-color: var(--accent); box-shadow: 0 0 12px rgba(124,58,237,0.2); }
+  .tool-btn.danger:hover { background: rgba(239,68,68,0.15); color: var(--danger); border-color: var(--danger); }
+
+  /* Size picker */
+  .size-track {
+    width: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .size-option {
+    border-radius: 50%;
+    background: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .size-option:hover, .size-option.active { background: white; }
+  .size-option.active { box-shadow: 0 0 8px rgba(255,255,255,0.4); }
+
+  /* Canvas area */
+  .canvas-area {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #080810;
+  }
+
+  /* Grid background */
+  .canvas-area::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  #drawingCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+  }
+
+  #videoEl {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    z-index: 0;
+    transform: scaleX(-1);
+  }
+
+  /* Webcam preview */
+  .webcam-preview {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 20;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+
+  .webcam-preview:hover { transform: scale(1.03); box-shadow: 0 12px 40px rgba(0,0,0,0.8); }
+
+  #webcamCanvas {
+    display: block;
+    width: 200px;
+    height: 150px;
+    transform: scaleX(-1);
+  }
+
+  .webcam-label {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 6px 10px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+  }
+
+  /* Gesture indicator */
+  .gesture-hud {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    transition: all 0.3s;
+    opacity: 0;
+  }
+
+  .gesture-hud.visible { opacity: 1; }
+  .gesture-hud .gesture-icon { font-size: 1.2rem; }
+  .gesture-hud .gesture-name { color: var(--text); }
+
+  /* Cursor dot */
+  #cursorDot {
+    position: absolute;
+    z-index: 30;
+    pointer-events: none;
+    transition: width 0.1s, height 0.1s;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Onboarding overlay */
+  #onboarding {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8,8,16,0.95);
+    backdrop-filter: blur(8px);
+    gap: 24px;
+    transition: opacity 0.5s;
+  }
+
+  #onboarding.hidden { opacity: 0; pointer-events: none; }
+
+  .onboarding-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+  }
+
+  .onboarding-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-align: center;
+    max-width: 400px;
+    line-height: 1.7;
+  }
+
+  .gesture-guide {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 600px;
+  }
+
+  .gesture-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 110px;
+    transition: all 0.2s;
+  }
+
+  .gesture-card:hover { border-color: var(--accent); background: rgba(124,58,237,0.08); }
+  .gesture-card .icon { font-size: 2rem; }
+  .gesture-card .gname { font-weight: 700; font-size: 0.8rem; }
+  .gesture-card .gdesc { font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--text-dim); text-align: center; }
+
+  .start-btn {
+    padding: 14px 36px;
+    border-radius: 100px;
+    background: linear-gradient(135deg, var(--accent), #6d28d9);
+    border: none;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(124,58,237,0.4);
+  }
+
+  .start-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(124,58,237,0.5); }
+  .start-btn:active { transform: translateY(0); }
+
+  /* Loading spinner */
+  .spinner {
+    width: 24px; height: 24px;
+    border: 2px solid rgba(255,255,255,0.1);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 10px 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text);
+    z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Opacity slider */
+  .opacity-track {
+    width: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  input[type=range].vert {
+    -webkit-appearance: none;
+    appearance: none;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 36px;
+    height: 70px;
+    background: var(--border);
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range].vert::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(124,58,237,0.5);
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="logo">AirDraw <span>v2.0</span></span>
+  </div>
+  <div class="status-pill" id="statusPill">
+    <div class="dot"></div>
+    <span id="statusText">READY</span>
+  </div>
+</header>
+
+<main>
+  <!-- Sidebar tools -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Color</div>
+      <div id="colorPalette"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Size</div>
+      <div class="size-track" id="sizePicker"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Opacity</div>
+      <div class="opacity-track">
+        <input type="range" class="vert" id="opacitySlider" min="10" max="100" value="100">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Tools</div>
+      <button class="tool-btn active" id="btnDraw" title="Draw">✏️</button>
+      <button class="tool-btn" id="btnErase" title="Eraser">🧹</button>
+      <button class="tool-btn danger" id="btnClear" title="Clear canvas">🗑️</button>
+      <button class="tool-btn" id="btnSave" title="Save image">💾</button>
+    </div>
+  </div>
+
+  <!-- Canvas area -->
+  <div class="canvas-area" id="canvasArea">
+    <video id="videoEl" autoplay playsinline muted></video>
+    <canvas id="drawingCanvas"></canvas>
+    <canvas id="webcamCanvas"></canvas>
+
+    <!-- Webcam preview -->
+    <div class="webcam-preview" id="webcamPreview" title="Click to toggle webcam feed size">
+      <canvas id="webcamSmall" width="320" height="240"></canvas>
+      <div class="webcam-label">📷 LIVE · HAND TRACKING</div>
+    </div>
+
+    <!-- Gesture HUD -->
+    <div class="gesture-hud" id="gestureHud">
+      <span class="gesture-icon" id="gestureIcon">✌️</span>
+      <span class="gesture-name" id="gestureName">Drawing</span>
+    </div>
+
+    <!-- Cursor dot -->
+    <canvas id="cursorDot" width="30" height="30"></canvas>
+
+    <!-- Onboarding -->
+    <div id="onboarding">
+      <div class="onboarding-title">✋ AirDraw</div>
+      <div class="onboarding-sub">Draw in the air with your hand.<br>No stylus. No touch. Just gestures.</div>
+      <div class="gesture-guide">
+        <div class="gesture-card">
+          <div class="icon">☝️</div>
+          <div class="gname">Draw</div>
+          <div class="gdesc">Index finger up only</div>
+        </div>
+        <div class="gesture-card">
+          <div class="icon">✌️</div>
+          <div class="gname">Move</div>
+          <div class="gdesc">Index + middle up</div>
+        </div>
+        <div class="gesture-card">
+          <div class="icon">✊</div>
+          <div class="gname">Pause</div>
+          <div class="gdesc">Close fist</div>
+        </div>
+        <div class="gesture-card">
+          <div class="icon">🤏</div>
+          <div class="gname">Erase</div>
+          <div class="gdesc">Pinch thumb+index</div>
+        </div>
+      </div>
+      <button class="start-btn" id="startBtn">Enable Camera & Start</button>
+      <div id="loadingRow" style="display:none; align-items:center; gap:12px; font-family:'Space Mono',monospace; font-size:0.75rem; color:var(--text-dim);">
+        <div class="spinner"></div>
+        <span id="loadingMsg">Loading MediaPipe…</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────
+const state = {
+  color: '#7c3aed',
+  size: 5,
+  opacity: 1,
+  tool: 'draw',   // 'draw' | 'erase'
+  isDrawing: false,
+  prevX: null, prevY: null,
+  gesture: null,
+  handVisible: false,
+  strokes: [],
+  currentStroke: null,
+  smoothX: null,
+  smoothY: null,
+};
+
+// ─── DOM ─────────────────────────────────────────────────────────
+const videoEl = document.getElementById('videoEl');
+const drawingCanvas = document.getElementById('drawingCanvas');
+const ctx = drawingCanvas.getContext('2d');
+const webcamSmall = document.getElementById('webcamSmall');
+const wCtx = webcamSmall.getContext('2d');
+const cursorDot = document.getElementById('cursorDot');
+const cursorCtx = cursorDot.getContext('2d');
+const gestureHud = document.getElementById('gestureHud');
+const gestureIcon = document.getElementById('gestureIcon');
+const gestureName = document.getElementById('gestureName');
+const statusPill = document.getElementById('statusPill');
+const statusText = document.getElementById('statusText');
+const onboarding = document.getElementById('onboarding');
+const loadingRow = document.getElementById('loadingRow');
+const loadingMsg = document.getElementById('loadingMsg');
+const canvasArea = document.getElementById('canvasArea');
+const startBtn = document.getElementById('startBtn');
+
+let handsInstance = null;
+let cameraInstance = null;
+let mediaStream = null;
+let isStarting = false;
+let isStopping = false;
+
+// ─── Colors ──────────────────────────────────────────────────────
+const colors = [
+  '#7c3aed','#06b6d4','#f59e0b','#10b981',
+  '#ef4444','#ec4899','#f97316','#ffffff',
+  '#94a3b8','#1e293b',
+];
+
+const colorPalette = document.getElementById('colorPalette');
+colorPalette.style.cssText = 'display:flex;flex-direction:column;gap:5px;';
+
+colors.forEach(c => {
+  const sw = document.createElement('div');
+  sw.className = 'color-swatch' + (c === state.color ? ' active' : '');
+  sw.style.background = c;
+  sw.title = c;
+  sw.onclick = () => {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    state.color = c;
+    state.tool = 'draw';
+    updateToolUI();
+  };
+  colorPalette.appendChild(sw);
+});
+
+// ─── Sizes ───────────────────────────────────────────────────────
+const sizes = [3, 6, 12, 20];
+const sizePicker = document.getElementById('sizePicker');
+sizes.forEach(s => {
+  const dot = document.createElement('div');
+  dot.className = 'size-option' + (s === state.size ? ' active' : '');
+  dot.style.cssText = `width:${s*1.5}px;height:${s*1.5}px;`;
+  dot.onclick = () => {
+    document.querySelectorAll('.size-option').forEach(d => d.classList.remove('active'));
+    dot.classList.add('active');
+    state.size = s;
+  };
+  sizePicker.appendChild(dot);
+});
+
+// ─── Opacity ─────────────────────────────────────────────────────
+document.getElementById('opacitySlider').addEventListener('input', e => {
+  state.opacity = e.target.value / 100;
+});
+
+// ─── Tool buttons ────────────────────────────────────────────────
+function updateToolUI() {
+  document.getElementById('btnDraw').classList.toggle('active', state.tool === 'draw');
+  document.getElementById('btnErase').classList.toggle('active', state.tool === 'erase');
+}
+
+document.getElementById('btnDraw').onclick = () => { state.tool = 'draw'; updateToolUI(); };
+document.getElementById('btnErase').onclick = () => { state.tool = 'erase'; updateToolUI(); };
+document.getElementById('btnClear').onclick = clearCanvas;
+document.getElementById('btnSave').onclick = saveCanvas;
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+  state.strokes = [];
+  showToast('Canvas cleared');
+}
+
+function saveCanvas() {
+  const link = document.createElement('a');
+  // Composite on white
+  const temp = document.createElement('canvas');
+  temp.width = drawingCanvas.width;
+  temp.height = drawingCanvas.height;
+  const tc = temp.getContext('2d');
+  tc.fillStyle = '#080810';
+  tc.fillRect(0,0,temp.width,temp.height);
+  tc.drawImage(drawingCanvas,0,0);
+  link.download = 'airdraw-' + Date.now() + '.png';
+  link.href = temp.toDataURL();
+  link.click();
+  showToast('Image saved!');
+}
+
+// ─── Resize ──────────────────────────────────────────────────────
+function resize() {
+  const { width, height } = canvasArea.getBoundingClientRect();
+  const nextWidth = Math.max(1, Math.floor(width));
+  const nextHeight = Math.max(1, Math.floor(height));
+
+  if (drawingCanvas.width === nextWidth && drawingCanvas.height === nextHeight) {
+    return;
+  }
+
+  drawingCanvas.width = nextWidth;
+  drawingCanvas.height = nextHeight;
+  redrawStrokes();
+}
+
+window.addEventListener('resize', resize);
+
+// ─── Gesture detection ───────────────────────────────────────────
+function isFingerUp(lm, finger) {
+  // finger: 0=thumb,1=index,2=middle,3=ring,4=pinky
+  const tips = [4,8,12,16,20];
+  const pips = [3,6,10,14,18];
+  if (finger === 0) {
+    return lm[4].x < lm[3].x; // thumb: tip left of knuckle (mirrored)
+  }
+  return lm[tips[finger]].y < lm[pips[finger]].y;
+}
+
+function detectGesture(lm) {
+  const index = isFingerUp(lm, 1);
+  const middle = isFingerUp(lm, 2);
+  const ring = isFingerUp(lm, 3);
+  const pinky = isFingerUp(lm, 4);
+
+  // Pinch: thumb + index close
+  const thumbTip = lm[4];
+  const indexTip = lm[8];
+  const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+  if (pinchDist < 0.06 && !middle && !ring && !pinky) return 'erase';
+
+  if (index && !middle && !ring && !pinky) return 'draw';
+  if (index && middle && !ring && !pinky) return 'move';
+  if (!index && !middle && !ring && !pinky) return 'pause';
+
+  return 'move';
+}
+
+// ─── Drawing ─────────────────────────────────────────────────────
+function drawLine(x1, y1, x2, y2, color, size, opacity, tool) {
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (tool === 'erase') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+    ctx.lineWidth = size * 3;
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size;
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function redrawStrokes() {
+  ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+  for (const stroke of state.strokes) {
+    for (let i = 1; i < stroke.points.length; i++) {
+      drawLine(
+        stroke.points[i-1].x, stroke.points[i-1].y,
+        stroke.points[i].x, stroke.points[i].y,
+        stroke.color, stroke.size, stroke.opacity, stroke.tool
+      );
+    }
+  }
+}
+
+// ─── Cursor dot ──────────────────────────────────────────────────
+function drawCursor(x, y, gesture, color) {
+  const isErasing = gesture === 'erase' || state.tool === 'erase';
+  const r = isErasing ? 20 : (state.size / 2 + 4);
+  const sz = r * 2 + 10;
+
+  cursorDot.width = sz;
+  cursorDot.height = sz;
+  cursorDot.style.left = (x - sz/2) + 'px';
+  cursorDot.style.top = (y - sz/2) + 'px';
+  cursorDot.style.width = sz + 'px';
+  cursorDot.style.height = sz + 'px';
+
+  const c = cursorDot.getContext('2d');
+  c.clearRect(0, 0, sz, sz);
+
+  if (gesture === 'move') {
+    // Crosshair
+    c.strokeStyle = 'rgba(255,255,255,0.6)';
+    c.lineWidth = 1.5;
+    c.setLineDash([3,3]);
+    c.beginPath();
+    c.arc(sz/2, sz/2, r, 0, Math.PI*2);
+    c.stroke();
+    c.setLineDash([]);
+  } else if (isErasing) {
+    c.strokeStyle = 'rgba(239,68,68,0.8)';
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(sz/2, sz/2, r, 0, Math.PI*2);
+    c.stroke();
+    c.strokeStyle = 'rgba(239,68,68,0.3)';
+    c.beginPath();
+    c.moveTo(sz/2-r*0.7, sz/2-r*0.7);
+    c.lineTo(sz/2+r*0.7, sz/2+r*0.7);
+    c.stroke();
+  } else {
+    // Dot
+    c.fillStyle = color;
+    c.shadowColor = color;
+    c.shadowBlur = 8;
+    c.beginPath();
+    c.arc(sz/2, sz/2, state.size/2, 0, Math.PI*2);
+    c.fill();
+
+    c.strokeStyle = 'rgba(255,255,255,0.5)';
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.arc(sz/2, sz/2, r, 0, Math.PI*2);
+    c.stroke();
+  }
+}
+
+// ─── Gesture HUD ─────────────────────────────────────────────────
+const gestureMap = {
+  draw:  { icon: '☝️', label: 'Drawing' },
+  move:  { icon: '✌️', label: 'Moving' },
+  pause: { icon: '✊', label: 'Paused' },
+  erase: { icon: '🤏', label: 'Erasing' },
+};
+
+let hudTimeout;
+function showGestureHud(g) {
+  if (!g || !gestureMap[g]) return;
+  const info = gestureMap[g];
+  gestureIcon.textContent = info.icon;
+  gestureName.textContent = info.label;
+  gestureHud.classList.add('visible');
+  clearTimeout(hudTimeout);
+  hudTimeout = setTimeout(() => gestureHud.classList.remove('visible'), 1500);
+}
+
+// ─── MediaPipe results ───────────────────────────────────────────
+let lastGesture = null;
+
+function onResults(results) {
+  const W = drawingCanvas.width;
+  const H = drawingCanvas.height;
+
+  // Draw webcam preview (mirrored)
+  wCtx.save();
+  wCtx.scale(-1, 1);
+  wCtx.drawImage(results.image, -webcamSmall.width, 0, webcamSmall.width, webcamSmall.height);
+  wCtx.restore();
+
+  // Draw landmarks on webcam preview
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const lm = results.multiHandLandmarks[0];
+    state.handVisible = true;
+
+    // Draw skeleton on preview
+    drawHandOnPreview(lm);
+
+    const gesture = detectGesture(lm);
+
+    if (gesture !== lastGesture) {
+      showGestureHud(gesture);
+      lastGesture = gesture;
+    }
+
+    // Update status
+    updateStatus('active', gesture.toUpperCase());
+
+    // Get index fingertip position (mirrored)
+    const tip = lm[8];
+    const rawX = (1 - tip.x) * W;
+    const rawY = tip.y * H;
+    const smoothing = 0.35;
+
+    if (state.smoothX === null || state.smoothY === null) {
+      state.smoothX = rawX;
+      state.smoothY = rawY;
+    } else {
+      state.smoothX += (rawX - state.smoothX) * smoothing;
+      state.smoothY += (rawY - state.smoothY) * smoothing;
+    }
+
+    const x = state.smoothX;
+    const y = state.smoothY;
+
+    cursorDot.style.display = 'block';
+    drawCursor(x, y, gesture, state.color);
+
+    if (gesture === 'draw' || (gesture === 'erase')) {
+      const activeTool = gesture === 'erase' ? 'erase' : state.tool;
+
+      if (state.prevX !== null && state.prevY !== null) {
+        drawLine(state.prevX, state.prevY, x, y, state.color, state.size, state.opacity, activeTool);
+
+        if (state.currentStroke) {
+          state.currentStroke.points.push({x, y});
+        }
+      } else {
+        // Start new stroke
+        state.currentStroke = {
+          color: state.color,
+          size: activeTool === 'erase' ? state.size * 3 : state.size,
+          opacity: state.opacity,
+          tool: activeTool,
+          points: [{x, y}]
+        };
+        state.strokes.push(state.currentStroke);
+      }
+
+      state.prevX = x;
+      state.prevY = y;
+      state.isDrawing = true;
+
+    } else {
+      state.prevX = null;
+      state.prevY = null;
+      state.isDrawing = false;
+      state.currentStroke = null;
+    }
+
+  } else {
+    state.handVisible = false;
+    state.prevX = null;
+    state.prevY = null;
+    state.isDrawing = false;
+    state.currentStroke = null;
+    state.smoothX = null;
+    state.smoothY = null;
+    cursorDot.style.display = 'none';
+
+    updateStatus('detecting', 'SEARCHING');
+
+    // Clear preview
+    wCtx.save();
+    wCtx.scale(-1, 1);
+    wCtx.drawImage(results.image, -webcamSmall.width, 0, webcamSmall.width, webcamSmall.height);
+    wCtx.restore();
+  }
+}
+
+// Draw hand skeleton on webcam preview
+function drawHandOnPreview(lm) {
+  const pw = webcamSmall.width;
+  const ph = webcamSmall.height;
+
+  const connections = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [0,9],[9,10],[10,11],[11,12],
+    [0,13],[13,14],[14,15],[15,16],
+    [0,17],[17,18],[18,19],[19,20],
+    [5,9],[9,13],[13,17]
+  ];
+
+  wCtx.strokeStyle = 'rgba(124,58,237,0.8)';
+  wCtx.lineWidth = 1.5;
+
+  for (const [a, b] of connections) {
+    const ax = (1 - lm[a].x) * pw;
+    const ay = lm[a].y * ph;
+    const bx = (1 - lm[b].x) * pw;
+    const by = lm[b].y * ph;
+    wCtx.beginPath();
+    wCtx.moveTo(ax, ay);
+    wCtx.lineTo(bx, by);
+    wCtx.stroke();
+  }
+
+  // Landmark dots
+  for (let i = 0; i < lm.length; i++) {
+    const x = (1 - lm[i].x) * pw;
+    const y = lm[i].y * ph;
+    wCtx.fillStyle = i === 8 ? '#06b6d4' : 'rgba(124,58,237,0.9)';
+    wCtx.beginPath();
+    wCtx.arc(x, y, i === 8 ? 4 : 2, 0, Math.PI*2);
+    wCtx.fill();
+  }
+}
+
+// ─── Status ──────────────────────────────────────────────────────
+function updateStatus(type, text) {
+  statusPill.className = 'status-pill ' + type;
+  statusText.textContent = text;
+}
+
+// ─── Toast ───────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ─── Start ───────────────────────────────────────────────────────
+function setStartUiLoading(isLoading, message = '') {
+  startBtn.disabled = isLoading;
+  startBtn.style.display = isLoading ? 'none' : '';
+  loadingRow.style.display = isLoading ? 'flex' : 'none';
+  if (message) loadingMsg.textContent = message;
+}
+
+function toCameraErrorMessage(err) {
+  if (!err) return 'Unable to start camera.';
+  if (err.name === 'NotAllowedError') return 'Camera permission denied. Allow camera access and retry.';
+  if (err.name === 'NotFoundError') return 'No camera detected on this device.';
+  if (err.name === 'NotReadableError') return 'Camera is busy in another app. Close it and retry.';
+  if (err.name === 'AbortError') return 'Camera startup was interrupted. Retry once.';
+  return err.message || 'Unable to start camera.';
+}
+
+async function stopTracking() {
+  if (isStopping) return;
+  isStopping = true;
+  try {
+    try {
+      if (cameraInstance && typeof cameraInstance.stop === 'function') {
+        await cameraInstance.stop();
+      }
+    } catch (err) {
+      console.warn('Camera stop warning:', err);
+    }
+
+    cameraInstance = null;
+
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+    }
+
+    mediaStream = null;
+    videoEl.srcObject = null;
+
+    state.prevX = null;
+    state.prevY = null;
+    state.isDrawing = false;
+    state.currentStroke = null;
+    state.smoothX = null;
+    state.smoothY = null;
+    cursorDot.style.display = 'none';
+  } finally {
+    isStopping = false;
+  }
+}
+
+async function startTracking() {
+  if (isStarting) return;
+  isStarting = true;
+  setStartUiLoading(true, 'Loading MediaPipe…');
+
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('This browser does not support camera access.');
+    }
+    if (!window.Hands || !window.Camera) {
+      throw new Error('MediaPipe scripts did not load. Check internet/CDN access and refresh.');
+    }
+
+    await stopTracking();
+
+    if (!handsInstance) {
+      handsInstance = new Hands({
+        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+      });
+      handsInstance.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.75,
+        minTrackingConfidence: 0.6
+      });
+      handsInstance.onResults(onResults);
+    }
+
+    setStartUiLoading(true, 'Accessing camera…');
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 1280, height: 720, facingMode: 'user' },
+      audio: false
+    });
+
+    const [videoTrack] = mediaStream.getVideoTracks();
+    if (videoTrack) {
+      videoTrack.addEventListener('ended', () => {
+        if (isStopping) return;
+        updateStatus('detecting', 'CAMERA LOST');
+        showToast('Camera disconnected. Press R to reconnect.');
+      });
+    }
+
+    videoEl.srcObject = mediaStream;
+    await new Promise((resolve, reject) => {
+      videoEl.onloadedmetadata = () => resolve();
+      videoEl.onerror = () => reject(new Error('Unable to initialize video stream.'));
+    });
+    await videoEl.play();
+
+    setStartUiLoading(true, 'Starting hand tracking…');
+    cameraInstance = new Camera(videoEl, {
+      onFrame: async () => {
+        if (handsInstance) await handsInstance.send({ image: videoEl });
+      },
+      width: 1280,
+      height: 720
+    });
+    await cameraInstance.start();
+
+    resize();
+    onboarding.classList.add('hidden');
+    startBtn.textContent = 'Reconnect Camera';
+    updateStatus('detecting', 'SEARCHING');
+    showToast('Hand tracking active - show your hand!');
+  } catch (err) {
+    await stopTracking();
+    console.error(err);
+    startBtn.textContent = 'Retry Camera';
+    updateStatus('', 'READY');
+    showToast(toCameraErrorMessage(err));
+  } finally {
+    isStarting = false;
+    setStartUiLoading(false);
+  }
+}
+
+startBtn.addEventListener('click', startTracking);
+statusPill.title = 'Click to reconnect camera';
+statusPill.style.cursor = 'pointer';
+statusPill.addEventListener('click', startTracking);
+window.addEventListener('beforeunload', stopTracking);
+
+// Initial resize
+window.addEventListener('load', resize);
+
+// Keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.key === 'd' || e.key === 'D') { state.tool = 'draw'; updateToolUI(); showToast('Draw mode'); }
+  if (e.key === 'e' || e.key === 'E') { state.tool = 'erase'; updateToolUI(); showToast('Erase mode'); }
+  if (e.key === 'c' || e.key === 'C') clearCanvas();
+  if (e.key === 's' || e.key === 'S') saveCanvas();
+  if (e.key === 'r' || e.key === 'R') { startTracking(); showToast('Reconnecting camera...'); }
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+    // Undo last stroke
+    e.preventDefault();
+    if (state.strokes.length > 0) {
+      state.strokes.pop();
+      redrawStrokes();
+      showToast('Undo');
+    }
+  }
+});
+
+// Also allow mouse drawing (desktop fallback)
+let mouseDown = false;
+drawingCanvas.addEventListener('mousedown', e => {
+  mouseDown = true;
+  const r = drawingCanvas.getBoundingClientRect();
+  state.prevX = e.clientX - r.left;
+  state.prevY = e.clientY - r.top;
+  state.currentStroke = {
+    color: state.color, size: state.size, opacity: state.opacity, tool: state.tool,
+    points: [{x: state.prevX, y: state.prevY}]
+  };
+  state.strokes.push(state.currentStroke);
+});
+
+drawingCanvas.addEventListener('mousemove', e => {
+  if (!mouseDown) return;
+  const r = drawingCanvas.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  drawLine(state.prevX, state.prevY, x, y, state.color, state.size, state.opacity, state.tool);
+  state.currentStroke && state.currentStroke.points.push({x, y});
+  state.prevX = x; state.prevY = y;
+});
+
+drawingCanvas.addEventListener('mouseup', () => { mouseDown = false; state.prevX = null; state.prevY = null; state.currentStroke = null; });
+drawingCanvas.addEventListener('mouseleave', () => { mouseDown = false; state.prevX = null; state.prevY = null; state.currentStroke = null; });
+</script>
+</body>
+</html>
